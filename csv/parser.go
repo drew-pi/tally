@@ -1,4 +1,4 @@
-package parser
+package csvparser
 
 import (
 	"database/sql"
