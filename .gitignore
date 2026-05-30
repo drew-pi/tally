@@ -30,6 +30,9 @@ go.work.sum
 # Editor/IDE
 .idea/
 .vscode/
-
 # program specific
 *.csv
+
+#macos
+.DS_Store
+

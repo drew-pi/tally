@@ -1,118 +1,88 @@
 package main
 
 import (
-	// "bufio"
-	// "encoding/csv"
 	"bufio"
 	"encoding/csv"
 	"fmt"
-	"os"
-
-	// "log"
-	// "os"
-	csvparser "tally/csv"
-	// "tally/db"
-	// "tally/queries"
-
 	"log"
 	"net/http"
+	"os"
+	csvparser "tally/csv"
 	"tally/db"
+	"tally/models"
+	"tally/test"
 )
 
 func main() {
 
-	fmt.Println("Hello, World!")
-
-	card := "WF"
-	file_name := card + "_04:2026.csv"
-
-	file, err := os.Open(file_name)
-	if err != nil {
-		fmt.Println("Error opening file:", err)
-		return
-	}
-	defer file.Close()
-
-	bufferedFile := bufio.NewReader(file)
-	reader := csv.NewReader(bufferedFile)
-
+	// connect to db
 	database, err := db.Connect()
 	if err != nil {
 		log.Fatalf("failed to connect to db: %v", err)
 	}
 	defer database.Close()
 
+	// run migrations to create tables
 	if err := db.RunMigrations(database); err != nil {
 		log.Fatalf("failed to run migrations: %v", err)
 	}
 
-	csvparser.ImportTransactions(database, card, reader)
+	// seed banks from known constants
+	if err := test.SeedBanks(database); err != nil {
+		log.Fatalf("failed to seed banks: %v", err)
+	}
 
-	rows, err := database.Query("SELECT date, description, amount, card FROM transactions")
+	if err := test.SeedPaymentMethods(database); err != nil {
+		log.Fatalf("failed to seed payment methods: %v", err)
+	}
+
+	// seed csv formats from BankConfigs
+	if err := test.SeedCSVFormats(database); err != nil {
+		log.Fatalf("failed to seed csv formats: %v", err)
+	}
+
+	// open and parse the csv
+	fileName := string(models.WellsFargo) + "_04:2026.csv"
+	file, err := os.Open(fileName)
 	if err != nil {
-		fmt.Println("Error querying db:", err)
-		return
+		log.Fatalf("failed to open file: %v", err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(bufio.NewReader(file))
+
+	// import transactions from csv into db
+	if err := csvparser.ImportTransactions(database, models.WellsFargo, reader); err != nil {
+		log.Fatalf("failed to import transactions: %v", err)
+	}
+
+	// query and print all transactions to verify import
+	rows, err := database.Query(`
+		SELECT id, date, vendor, description, category, amount, payment_method_id 
+		FROM transactions 
+		ORDER BY date DESC
+	`)
+	if err != nil {
+		log.Fatalf("failed to query transactions: %v", err)
 	}
 	defer rows.Close()
 
+	fmt.Println("\n--- Imported Transactions ---")
 	for rows.Next() {
-		var date, description, amount, card string
-		err := rows.Scan(&date, &description, &amount, &card)
+		var id, paymentMethodID int
+		var date, vendor, description, category, amount string
+		err := rows.Scan(&id, &date, &vendor, &description, &category, &amount, &paymentMethodID)
 		if err != nil {
-			fmt.Println("Error scanning row:", err)
-			return
+			log.Fatalf("failed to scan row: %v", err)
 		}
-		fmt.Println(date, description, amount, card)
+		fmt.Printf("id=%-4d date=%-25s vendor=%-30s amount=%s\n", id, date, vendor, amount)
 	}
+	fmt.Println("-----------------------------")
 
+	// start http server
 	router := setupRoutes(database)
-
 	log.Println("server starting on :8080")
-	http.ListenAndServe(":8080", router)
+	if err := http.ListenAndServe(":8080", router); err != nil {
+		log.Fatalf("server failed: %v", err)
+	}
 }
-
-// func main() {
-// 	bank := "WF"
-// 	fileName := bank + "_04:2026.csv"
-
-// 	file, err := os.Open(fileName)
-// 	if err != nil {
-// 		log.Fatalf("failed to open file: %v", err)
-// 	}
-// 	defer file.Close()
-
-// 	reader := csv.NewReader(bufio.NewReader(file))
-
-// 	database, err := db.Connect()
-// 	if err != nil {
-// 		log.Fatalf("failed to connect to db: %v", err)
-// 	}
-// 	defer database.Close()
-
-// 	if err := db.RunMigrations(database); err != nil {
-// 		log.Fatalf("failed to run migrations: %v", err)
-// 	}
-
-// 	if err := csvparser.ImportTransactions(database, bank, reader); err != nil {
-// 		log.Fatalf("failed to import transactions: %v", err)
-// 	}
-
-// 	rows, err := queries.GetAllTransactions(database)
-// 	if err != nil {
-// 		log.Fatalf("error querying db: %v", err)
-// 		return
-// 	}
-
-// 	for rows.Next() {
-// 		var date, description, amount, card string
-// 		err := rows.Scan(&date, &description, &amount, &card)
-// 		if err != nil {
-// 			fmt.Println("Error scanning row:", err)
-// 			return
-// 		}
-// 		fmt.Println(date, description, amount, card)
-// 	}
-
-// 	fmt.Println("Import successful")
-
-// }

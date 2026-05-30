@@ -6,15 +6,39 @@ import (
 	"time"
 )
 
-type Transaction struct {
-	ID          int       `json:"id"`
-	Date        time.Time `json:"date"`
-	Description string    `json:"description"`
-	Amount      float64   `json:"amount"`
-	Card        string    `json:"card"`
+type ColumnType string
+
+const (
+	ColumnDate            ColumnType = "date"
+	ColumnVendor          ColumnType = "vendor"
+	ColumnDescription     ColumnType = "description"
+	ColumnCategory        ColumnType = "category"
+	ColumnAmount          ColumnType = "amount"
+	ColumnPaymentMethodID ColumnType = "payment_method_id"
+)
+
+func (c ColumnType) IsValid() bool {
+	switch c {
+	case ColumnDate, ColumnVendor, ColumnAmount: // ColumnDescription, ColumnCategory, ColumnPaymentMethodID:
+		return true
+	}
+	return false
 }
 
-func NewTransaction(id int, dateStr, description, amount, card string) (Transaction, error) {
+// BankColumnMap maps CSV column names to standardized ColumnTypes
+type BankColumnMap map[string]ColumnType
+
+type Transaction struct {
+	ID              int       `json:"id"`
+	Date            time.Time `json:"date"`
+	Vendor          string    `json:"vendor"`
+	Description     string    `json:"description"`
+	Category        string    `json:"category"`
+	Amount          float64   `json:"amount"`
+	PaymentMethodID int       `json:"payment_method_id"`
+}
+
+func NewTransaction(id int, dateStr, vendor, description, category, amount string, paymentMethodID int) (Transaction, error) {
 	date, err := time.Parse(time.RFC3339, dateStr)
 	if err != nil {
 		return Transaction{}, fmt.Errorf("failed to parse date: %w", err)
@@ -26,37 +50,12 @@ func NewTransaction(id int, dateStr, description, amount, card string) (Transact
 	}
 
 	return Transaction{
-		ID:          id,
-		Date:        date,
-		Description: description,
-		Amount:      parsedAmount,
-		Card:        card,
+		ID:              id,
+		Date:            date,
+		Vendor:          vendor,
+		Description:     description,
+		Category:        category,
+		Amount:          parsedAmount,
+		PaymentMethodID: paymentMethodID,
 	}, nil
-}
-
-type ColumnType string
-
-const (
-	ColumnDate   ColumnType = "date"
-	ColumnName   ColumnType = "name"
-	ColumnAmount ColumnType = "amount"
-)
-
-// BankColumnMap maps CSV column names to standardized ColumnTypes
-type BankColumnMap map[string]ColumnType
-
-// CSVConfig maps bank names to their column mappings
-type CSVConfig map[string]BankColumnMap
-
-var BankConfigs = CSVConfig{
-	"WF": {
-		"date":        ColumnDate,
-		"description": ColumnName,
-		"amount":      ColumnAmount,
-	},
-	"Fidelity": {
-		"date":   ColumnDate,
-		"name":   ColumnName,
-		"amount": ColumnAmount,
-	},
 }
